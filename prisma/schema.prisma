@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Portfolio {
+  id        String     @id @default(cuid())
+  name      String     @default("Main Portfolio")
+  cash      Float      @default(100000)
+  positions Position[]
+  trades    Trade[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model Position {
+  id         String   @id @default(cuid())
+  portfolioId String
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  ticker     String
+  shares     Float
+  avgPrice   Float
+  side       String   @default("long")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([portfolioId, ticker])
+}
+
+model Trade {
+  id         String   @id @default(cuid())
+  portfolioId String
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  ticker     String
+  type       String   // market, limit, stop
+  side       String   // buy, sell
+  shares     Float
+  price      Float
+  timestamp  DateTime @default(now())
+}
+
+model Watchlist {
+  id        String          @id @default(cuid())
+  name      String          @default("Default")
+  items     WatchlistItem[]
+  createdAt DateTime        @default(now())
+}
+
+model WatchlistItem {
+  id          String    @id @default(cuid())
+  watchlistId String
+  watchlist   Watchlist @relation(fields: [watchlistId], references: [id], onDelete: Cascade)
+  ticker      String
+  addedAt     DateTime  @default(now())
+
+  @@unique([watchlistId, ticker])
+}
+
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+}
