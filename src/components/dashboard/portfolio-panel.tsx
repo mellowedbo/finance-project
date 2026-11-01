@@ -85,7 +85,7 @@ export function PortfolioPanel({ portfolioId = 'default' }: PortfolioPanelProps)
 
   // Mock equity curve
   const equityCurve = useMemo(() => {
-    const curve = [];
+    const curve: { day: number; equity: number }[] = [];
     let value = 100000;
     for (let i = 0; i < 30; i++) {
       value += (Math.random() - 0.48) * value * 0.01;

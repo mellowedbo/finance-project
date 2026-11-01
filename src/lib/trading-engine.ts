@@ -52,6 +52,8 @@ export interface PortfolioState {
   name: string;
   cash: number;
   positions: Position[];
+  /** Sampled portfolio value over time — powers real drawdown/Sharpe metrics */
+  equityHistory: { at: number; value: number }[];
   totalValue: number;
   totalPnL: number;
   totalPnLPercent: number;
@@ -91,6 +93,7 @@ class TradingEngine {
       name,
       cash,
       positions: [],
+      equityHistory: [{ at: Date.now(), value: cash }],
       totalValue: cash,
       totalPnL: 0,
       totalPnLPercent: 0,
@@ -242,6 +245,13 @@ class TradingEngine {
     portfolio.dayPnL = portfolio.totalValue - previousTotalValue;
     portfolio.dayPnLPercent = previousTotalValue > 0 ? (portfolio.dayPnL / previousTotalValue) * 100 : 0;
 
+    // Sample the equity curve (max 5_000 points, oldest dropped)
+    const history = portfolio.equityHistory;
+    if (history.length === 0 || portfolio.totalValue !== history[history.length - 1].value) {
+      history.push({ at: Date.now(), value: portfolio.totalValue });
+      if (history.length > 5_000) history.splice(0, history.length - 5_000);
+    }
+
     // Check limit and stop orders
     for (const order of portfolio.orders) {
       if (order.type === 'limit' && order.price) {
@@ -283,17 +293,57 @@ class TradingEngine {
     const avgWin = wins.length > 0 ? wins.reduce((s, t) => s + (t.pnl ?? 0), 0) / wins.length : 0;
     const avgLoss = losses.length > 0 ? Math.abs(losses.reduce((s, t) => s + (t.pnl ?? 0), 0) / losses.length) : 0;
 
+    // ── Real risk metrics from the sampled equity curve ──
+    const equity = portfolio.equityHistory.map(p => p.value);
+    let peak = equity[0] ?? DEFAULT_STARTING_CASH;
+    let maxDrawdown = 0;
+    for (const value of equity) {
+      if (value > peak) peak = value;
+      const drawdown = (value - peak) / peak;
+      if (drawdown < maxDrawdown) maxDrawdown = drawdown;
+    }
+
+    const periodReturns: number[] = [];
+    for (let i = 1; i < equity.length; i++) {
+      if (equity[i - 1] > 0) periodReturns.push(equity[i] / equity[i - 1] - 1);
+    }
+    const meanReturn = periodReturns.length > 0
+      ? periodReturns.reduce((s, r) => s + r, 0) / periodReturns.length : 0;
+    const variance = periodReturns.length > 1
+      ? periodReturns.reduce((s, r) => s + (r - meanReturn) ** 2, 0) / (periodReturns.length - 1) : 0;
+    const periodVol = Math.sqrt(variance);
+    // Annualise assuming ~5 price updates per trading day (30s polling)
+    const sharpeRatio = periodVol > 0
+      ? (meanReturn / periodVol) * Math.sqrt(252 * 5) : 0;
+
+    // Average holding period from matched buy->sell pairs (days)
+    const buyTimes = portfolio.trades.filter(t => t.side === 'buy').map(t => t.timestamp);
+    const holdDays = sellTrades
+      .map(sell => {
+        const priorBuys = buyTimes.filter(bt => bt <= sell.timestamp);
+        const lastBuy = priorBuys[priorBuys.length - 1];
+        return lastBuy ? (sell.timestamp - lastBuy) / 86_400_000 : undefined;
+      })
+      .filter((d): d is number => d !== undefined);
+    const avgHoldPeriod = holdDays.length > 0
+      ? holdDays.reduce((s, d) => s + d, 0) / holdDays.length : 0;
+
+    const spanDays = equity.length > 1
+      ? (portfolio.equityHistory[equity.length - 1].at - portfolio.equityHistory[0].at) / 86_400_000 : 0;
+    const annualizedReturn = spanDays > 1
+      ? Math.pow(1 + totalReturn, 365 / spanDays) - 1 : totalReturn;
+
     return {
       totalReturn,
-      annualizedReturn: totalReturn * (252 / Math.max(1, portfolio.trades.length)),
-      sharpeRatio: portfolio.totalPnLPercent / (Math.abs(portfolio.totalPnLPercent) + 1) * Math.sqrt(252),
-      maxDrawdown: 0.05, // Simplified
+      annualizedReturn,
+      sharpeRatio,
+      maxDrawdown,
       winRate: sellTrades.length > 0 ? wins.length / sellTrades.length : 0,
       avgWin,
       avgLoss,
       profitFactor: avgLoss > 0 ? (avgWin * wins.length) / (avgLoss * losses.length) : 0,
       totalTrades: portfolio.trades.length,
-      avgHoldPeriod: 5, // Simplified
+      avgHoldPeriod,
     };
   }
 

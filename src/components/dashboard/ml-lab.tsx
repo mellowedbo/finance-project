@@ -1,6 +1,12 @@
 'use client';
 
 import React, { useState, useMemo, useCallback } from 'react';
+
+type AnalysisOutput =
+  | { type: 'regression'; ols: RegressionResult; ridge: RidgeResult; lasso: LassoResult }
+  | { type: 'pca'; pca: PCAResult }
+  | { type: 'clustering'; clustering: KMeansResult }
+  | { type: 'forecast'; forecast: TimeSeriesForecastResult; historicalPrices: number[] };
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -58,7 +64,7 @@ export function MLLab() {
   const [degree, setDegree] = useState([2]);
   const [k, setK] = useState([3]);
   const [forecastHorizon, setForecastHorizon] = useState([10]);
-  const [result, setResult] = useState<unknown>(null);
+  const [result, setResult] = useState<AnalysisOutput | null>(null);
   const [running, setRunning] = useState(false);
 
   const runAnalysis = useCallback(() => {
@@ -210,17 +216,17 @@ export function MLLab() {
       {/* Results */}
       {result && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {(result as { type: string }).type === 'regression' && (
-            <RegressionResults result={result as { type: 'regression'; ols: RegressionResult; ridge: RidgeResult; lasso: LassoResult }} />
+          {result.type === 'regression' && (
+            <RegressionResults result={result} />
           )}
-          {(result as { type: string }).type === 'pca' && (
-            <PCAResults result={result as { type: 'pca'; pca: PCAResult }} />
+          {result.type === 'pca' && (
+            <PCAResults result={result} />
           )}
-          {(result as { type: string }).type === 'clustering' && (
-            <ClusteringResults result={result as { type: 'clustering'; clustering: KMeansResult }} />
+          {result.type === 'clustering' && (
+            <ClusteringResults result={result} />
           )}
-          {(result as { type: string }).type === 'forecast' && (
-            <ForecastResults result={result as { type: 'forecast'; forecast: TimeSeriesForecastResult; historicalPrices: number[] }} />
+          {result.type === 'forecast' && (
+            <ForecastResults result={result} />
           )}
         </div>
       )}

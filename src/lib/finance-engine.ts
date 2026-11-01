@@ -432,7 +432,8 @@ export function capm(
   const y = stockReturns.slice(0, n);
   const x = marketReturns.slice(0, n);
 
-  const reg = ss.linearRegression({ x, y });
+  // simple-statistics expects an array of [x, y] pairs
+  const reg = ss.linearRegression(x.map((xi, i) => [xi, y[i]] as [number, number]));
   const beta = reg.m;
   const alpha = reg.b;
 

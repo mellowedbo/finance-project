@@ -720,7 +720,7 @@ export function timeSeriesForecast(
     let arCoef = 0;
     if (diffLag.length > 2) {
       try {
-        const reg = ss.linearRegression({ x: diffLag, y: diffCurr });
+        const reg = ss.linearRegression(diffLag.map((xi, i) => [xi, diffCurr[i]] as [number, number]));
         arCoef = reg.m;
       } catch {
         arCoef = 0;
